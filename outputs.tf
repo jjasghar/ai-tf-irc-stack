@@ -1,11 +1,20 @@
-output "droplet_ip" {
+output "server_ip" {
   description = "Public IP address of the IRC server"
-  value       = digitalocean_droplet.irc_server.ipv4_address
+  value       = local.server_ip
 }
 
-output "droplet_private_ip" {
+output "server_private_ip" {
   description = "Private IP address of the IRC server"
-  value       = digitalocean_droplet.irc_server.ipv4_address_private
+  value = var.cloud_provider == "digitalocean" ? (
+    length(digitalocean_droplet.irc_server) > 0 ? digitalocean_droplet.irc_server[0].ipv4_address_private : ""
+  ) : (
+    length(ibm_is_instance.irc_server) > 0 ? ibm_is_instance.irc_server[0].primary_network_interface[0].primary_ip[0].address : ""
+  )
+}
+
+output "cloud_provider" {
+  description = "Cloud provider used for deployment"
+  value       = var.cloud_provider
 }
 
 output "hostname" {
@@ -30,13 +39,13 @@ output "irc_server_plain" {
 
 output "ssh_connection" {
   description = "SSH connection command"
-  value       = "ssh root@${digitalocean_droplet.irc_server.ipv4_address}"
+  value       = "ssh root@${local.server_ip}"
 }
 
 output "dns_records" {
   description = "Created DNS records"
   value = {
-    a_record     = "${local.unique_hostname} -> ${digitalocean_droplet.irc_server.ipv4_address}"
+    a_record     = "${local.unique_hostname} -> ${local.server_ip}"
     cname_record = var.create_www_cname ? "www.${var.dns_record_name}-${random_string.dns_suffix.result}.${var.dns_zone} -> ${var.dns_record_name}-${random_string.dns_suffix.result}.${var.dns_zone}" : "Not created"
   }
 }

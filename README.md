@@ -1,23 +1,44 @@
 # IRC Stack Terraform Deployment
 
-This Terraform configuration deploys a complete IRC stack on DigitalOcean with:
+[![Multi-Cloud Support](https://img.shields.io/badge/Multi--Cloud-DigitalOcean%20%7C%20IBM%20Cloud-blue?style=flat-square)](#cloud-providers)
+[![Terraform](https://img.shields.io/badge/Terraform-1.0%2B-623CE4?logo=terraform&style=flat-square)](https://terraform.io)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](LICENSE)
+
+This Terraform configuration deploys a complete IRC stack with **multi-cloud support**:
 
 - **Ergo IRC Server** - Modern IRC server written in Go
 - **The Lounge** - Modern web IRC client
 - **Caddy** - Reverse proxy with automatic HTTPS
 - **DNSimple** - DNS management
 
+### ☁️ **Cloud Providers Supported:**
+- **🌊 DigitalOcean** - Droplets, Firewalls, SSH Keys
+- **☁️ IBM Cloud** - Virtual Server Instances, VPC, Security Groups
+
 ## Architecture
 
 ```
 Internet
     ↓
-[DNSimple DNS] → [DigitalOcean Droplet]
+[DNSimple DNS] → [Cloud Instance: DigitalOcean or IBM Cloud]
                       ↓
                  [Caddy :80/:443] 
                       ↓
                  [The Lounge :9000] ← → [Ergo IRC :6667/:6697]
 ```
+
+### Cloud-Specific Architecture
+
+**DigitalOcean:**
+- Droplet (Virtual Machine)
+- DigitalOcean Firewall
+- SSH Key Management
+
+**IBM Cloud:**
+- Virtual Server Instance (VSI)
+- VPC with Subnet
+- Security Groups
+- Floating IP
 
 ## Project Structure
 
@@ -40,10 +61,19 @@ ai-tf-do-irc-stack/
 
 ## Prerequisites
 
-1. **DigitalOcean Account** with API token
-2. **DNSimple Account** with API token and domain management
-3. **SSH Key Pair** for server access
-4. **Terraform** installed (>= 1.0)
+### For All Deployments:
+1. **DNSimple Account** with API token and domain management
+2. **SSH Key Pair** for server access  
+3. **Terraform** installed (>= 1.0)
+
+### For DigitalOcean:
+4. **DigitalOcean Account** with API token
+5. **SSH Key** uploaded to DigitalOcean
+
+### For IBM Cloud:
+4. **IBM Cloud Account** with API key
+5. **SSH Key** created in IBM Cloud console
+6. **Resource Group** (default or custom)
 
 ## Quick Start
 
@@ -71,15 +101,96 @@ ai-tf-do-irc-stack/
    - IRC SSL: `irc-testing.asgharlabs.io:6697`
    - IRC Plain: `irc-testing.asgharlabs.io:6667`
 
+## Cloud Providers
+
+This deployment supports both **DigitalOcean** and **IBM Cloud**. Choose your preferred provider by setting the `cloud_provider` variable.
+
+### 🌊 DigitalOcean Configuration
+
+**Required variables:**
+```hcl
+cloud_provider = "digitalocean"
+do_token = "your_digitalocean_api_token_here"
+```
+
+**Resources created:**
+- Droplet (Virtual Machine) - `s-2vcpu-4gb` (2 vCPU, 4GB RAM)
+- Firewall with IRC and web ports open
+- Uses existing SSH key by ID
+
+**Setup steps:**
+1. Get API token from [DigitalOcean API](https://cloud.digitalocean.com/account/api/tokens)
+2. Upload your SSH key to DigitalOcean
+3. Update the SSH key ID in `main.tf` (line 50)
+
+### ☁️ IBM Cloud Configuration
+
+**Required variables:**
+```hcl
+cloud_provider = "ibm"
+ibm_api_key = "your_ibm_api_key_here"
+ibm_ssh_key_name = "your_ssh_key_name"
+```
+
+**Optional variables:**
+```hcl
+ibm_region = "us-south"              # Default region
+ibm_resource_group = "default"        # Default resource group
+```
+
+**Resources created:**
+- Virtual Server Instance (VSI) - `bx2-2x8` (2 vCPU, 8GB RAM)
+- VPC with subnet and security group
+- Floating IP for public access
+- Security group rules for IRC and web ports
+
+**Setup steps:**
+1. Get API key from [IBM Cloud API Keys](https://cloud.ibm.com/iam/apikeys)
+2. Create SSH key in [IBM Cloud Console](https://cloud.ibm.com/vpc-ext/compute/sshKeys)
+3. Note your resource group name (default: "default")
+
+### 🔄 Switching Cloud Providers
+
+To switch between providers:
+
+1. **Update `terraform.tfvars`:**
+   ```hcl
+   # For DigitalOcean
+   cloud_provider = "digitalocean"
+   
+   # For IBM Cloud  
+   cloud_provider = "ibm"
+   ```
+
+2. **Run Terraform:**
+   ```bash
+   terraform plan    # Review changes
+   terraform apply   # Deploy to new provider
+   ```
+
+> **Note:** The infrastructure is conditionally created based on `cloud_provider`. Only resources for the selected provider will be created.
+
 ## Configuration
 
 ### Required Variables
 
+#### For All Deployments:
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `cloud_provider` | Cloud provider to use | `"digitalocean"` or `"ibm"` |
+| `dnsimple_token` | DNSimple API token | `your_token` |
+| `dnsimple_account_id` | DNSimple account ID | `12345` |
+
+#### For DigitalOcean Only:
 | Variable | Description | Example |
 |----------|-------------|---------|
 | `do_token` | DigitalOcean API token | `dop_v1_...` |
-| `dnsimple_token` | DNSimple API token | `your_token` |
-| `dnsimple_account_id` | DNSimple account ID | `12345` |
+
+#### For IBM Cloud Only:
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `ibm_api_key` | IBM Cloud API key | `your_api_key` |
+| `ibm_ssh_key_name` | SSH key name in IBM Cloud | `my-ssh-key` |
 
 ### Optional Variables
 

@@ -80,3 +80,40 @@ variable "ergo_motd" {
   type        = string
   default     = "Welcome to Asgharlabs IRC Network!"
 }
+
+# Cloud Provider Selection
+variable "cloud_provider" {
+  description = "Cloud provider to use (digitalocean or ibm)"
+  type        = string
+  default     = "digitalocean"
+  validation {
+    condition     = contains(["digitalocean", "ibm"], var.cloud_provider)
+    error_message = "The cloud_provider value must be either 'digitalocean' or 'ibm'."
+  }
+}
+
+# IBM Cloud Configuration
+variable "ibm_api_key" {
+  description = "IBM Cloud API key"
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
+variable "ibm_region" {
+  description = "IBM Cloud region"
+  type        = string
+  default     = "us-south"
+}
+
+variable "ibm_resource_group" {
+  description = "IBM Cloud resource group name"
+  type        = string
+  default     = "default"
+}
+
+variable "ibm_ssh_key_name" {
+  description = "Name of existing IBM Cloud SSH key"
+  type        = string
+  default     = ""
+}
