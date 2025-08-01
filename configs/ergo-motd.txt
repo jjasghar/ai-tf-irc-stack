@@ -1,0 +1,27 @@
+┌─────────────────────────────────────────────────────────────┐
+│                    Welcome to {ergo_network}                   │
+└─────────────────────────────────────────────────────────────┘
+
+🌟 Modern IRC Server powered by Ergo
+🔗 Server: {hostname}
+
+📋 Connection Options:
+   💻 Web Client: https://{hostname}
+   🔒 SSL/TLS:    {hostname}:6697
+   📡 Plain:      {hostname}:6667
+
+✨ Features:
+   • IRCv3 compliance with modern features
+   • Message history and search
+   • Account registration available
+   • Always-on connections supported
+   • Channel registration enabled
+
+💬 Getting Started:
+   1. Register your nick: /msg NickServ REGISTER <password> <email>
+   2. Join channels: /join #lobby
+   3. Get help: /msg HostServ HELP
+
+🎯 This is a public IRC server - be respectful and follow community guidelines.
+
+Enjoy chatting! 🚀

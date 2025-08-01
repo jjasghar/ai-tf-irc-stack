@@ -1,0 +1,38 @@
+# Copy this file to terraform.tfvars and fill in your values
+
+# DigitalOcean API Token
+# Get this from: https://cloud.digitalocean.com/account/api/tokens
+do_token = "your_digitalocean_api_token_here"
+
+# DNSimple API Token  
+# Get this from: https://dnsimple.com/user (Account Settings > Automation)
+dnsimple_token = "your_dnsimple_api_token_here"
+
+# DNSimple Account ID
+# Find this in your DNSimple account dashboard URL or account settings
+dnsimple_account_id = "your_dnsimple_account_id_here"
+
+# SSH Key Paths
+# Path to your SSH public key file
+ssh_public_key_path = "~/.ssh/id_rsa.pub"
+# Path to your SSH private key file (for provisioners)
+ssh_private_key_path = "~/.ssh/id_rsa"
+
+# Project Configuration
+project_name = "irc-stack"
+region       = "nyc3"  # DigitalOcean region
+
+# DNS Configuration
+dns_zone        = "asgharlabs.io"
+dns_record_name = "irc"                    # For production: "irc" -> irc.asgharlabs.io
+create_www_cname = false
+
+# Debug Mode (optional)
+# Set to true to add random suffix to hostname for testing (e.g., irc-abc123.asgharlabs.io)
+# Set to false for clean production hostnames (e.g., irc.asgharlabs.io)
+debug_mode = false
+
+# Server Configuration
+admin_email        = "admin@asgharlabs.io"
+ergo_network_name  = "AsgharlabsNet"
+ergo_motd          = "Welcome to Asgharlabs IRC Network!"

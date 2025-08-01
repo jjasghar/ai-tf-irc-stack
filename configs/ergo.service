@@ -1,0 +1,14 @@
+[Unit]
+Description=Ergo IRC Server
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/ergo
+ExecStart=/opt/ergo/ergo run
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

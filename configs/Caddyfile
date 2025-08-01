@@ -1,0 +1,31 @@
+{hostname} {
+    reverse_proxy localhost:9000
+    
+    # Enable compression
+    encode gzip
+    
+    # Security headers
+    header {
+        # Enable HSTS
+        Strict-Transport-Security max-age=31536000;
+        # Prevent MIME sniffing
+        X-Content-Type-Options nosniff
+        # Prevent clickjacking
+        X-Frame-Options DENY
+        # XSS protection
+        X-XSS-Protection "1; mode=block"
+        # Referrer policy
+        Referrer-Policy strict-origin-when-cross-origin
+    }
+    
+    # Logs
+    log {
+        output file /var/log/caddy/access.log
+        format json
+    }
+}
+
+# Redirect www to non-www (if needed)
+www.{hostname} {
+    redir https://{hostname}{uri} permanent
+}

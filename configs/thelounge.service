@@ -1,0 +1,13 @@
+[Unit]
+Description=The Lounge IRC Web Client
+After=network.target
+
+[Service]
+Type=simple
+User=thelounge
+ExecStart=/usr/bin/thelounge start --home /home/thelounge/.thelounge
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
