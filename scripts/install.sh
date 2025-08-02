@@ -13,21 +13,49 @@ echo "Admin Email: $ADMIN_EMAIL"
 echo "Ergo Network: $ERGO_NETWORK"
 echo "Ergo MOTD: $ERGO_MOTD"
 
-# Update system
-echo "Updating system packages..."
-# Refresh GPG keys first to avoid signature issues
-dnf update -y --refresh --nogpgcheck fedora-gpg-keys || echo "GPG key update failed, continuing..."
-# Try update with nogpgcheck to work around signature issues
-dnf update -y --nogpgcheck || echo "System update failed, continuing with package installation..."
+# Detect OS
+if [ -f /etc/os-release ]; then
+    . /etc/os-release
+    OS=$ID
+    OS_VERSION=$VERSION_ID
+fi
 
-# Install required packages (excluding nodejs/npm - will install separately)
-echo "Installing required packages..."
-dnf install -y --nogpgcheck git wget curl tar gzip golang firewalld || echo "Some packages failed to install, continuing..."
+echo "Detected OS: $OS $OS_VERSION"
+
+# Update system and install packages based on OS
+if [[ "$OS" == "fedora" ]]; then
+    echo "Updating Fedora system packages..."
+    # Refresh GPG keys first to avoid signature issues
+    dnf update -y --refresh --nogpgcheck fedora-gpg-keys || echo "GPG key update failed, continuing..."
+    # Try update with nogpgcheck to work around signature issues
+    dnf update -y --nogpgcheck || echo "System update failed, continuing with package installation..."
+    
+    # Install required packages (excluding nodejs/npm - will install separately)
+    echo "Installing required packages on Fedora..."
+    dnf install -y --nogpgcheck git wget curl tar gzip golang firewalld || echo "Some packages failed to install, continuing..."
+    
+elif [[ "$OS" == "debian" || "$OS" == "ubuntu" ]]; then
+    echo "Updating Debian/Ubuntu system packages..."
+    apt update -y || echo "System update failed, continuing with package installation..."
+    
+    # Install required packages (excluding nodejs/npm - will install separately)
+    echo "Installing required packages on Debian/Ubuntu..."
+    apt install -y git wget curl tar gzip golang-go ufw || echo "Some packages failed to install, continuing..."
+    
+else
+    echo "Unsupported OS: $OS"
+    exit 1
+fi
 
 # Install Node.js from official NodeSource repository to avoid library conflicts
 echo "Installing Node.js from official source..."
-curl -fsSL https://rpm.nodesource.com/setup_20.x | bash - || echo "Failed to add NodeSource repo, trying fallback..."
-dnf install -y --nogpgcheck nodejs || echo "Failed to install Node.js from repo, trying binary download..."
+if [[ "$OS" == "fedora" ]]; then
+    curl -fsSL https://rpm.nodesource.com/setup_20.x | bash - || echo "Failed to add NodeSource repo, trying fallback..."
+    dnf install -y --nogpgcheck nodejs || echo "Failed to install Node.js from repo, trying binary download..."
+elif [[ "$OS" == "debian" || "$OS" == "ubuntu" ]]; then
+    curl -fsSL https://deb.nodesource.com/setup_20.x | bash - || echo "Failed to add NodeSource repo, trying fallback..."
+    apt install -y nodejs || echo "Failed to install Node.js from repo, trying binary download..."
+fi
 
 # Fallback: Install Node.js binary if package manager fails
 if ! command -v node &> /dev/null; then
@@ -46,21 +74,44 @@ echo "npm version: $(npm --version)"
 
 # Install Caddy
 echo "Installing Caddy..."
-dnf install -y --nogpgcheck 'dnf-command(copr)' || echo "Failed to install copr command, trying alternative..."
-dnf copr enable -y @caddy/caddy || echo "Failed to enable Caddy repo, trying direct install..."
-dnf install -y --nogpgcheck caddy || echo "Failed to install Caddy via repo, will try direct download..."
+if [[ "$OS" == "fedora" ]]; then
+    dnf install -y --nogpgcheck 'dnf-command(copr)' || echo "Failed to install copr command, trying alternative..."
+    dnf copr enable -y @caddy/caddy || echo "Failed to enable Caddy repo, trying direct install..."
+    dnf install -y --nogpgcheck caddy || echo "Failed to install Caddy via repo, will try direct download..."
+elif [[ "$OS" == "debian" || "$OS" == "ubuntu" ]]; then
+    apt install -y debian-keyring debian-archive-keyring apt-transport-https || echo "Failed to install keyring packages..."
+    curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg || echo "Failed to add Caddy GPG key..."
+    curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | tee /etc/apt/sources.list.d/caddy-stable.list
+    apt update || echo "Failed to update package list..."
+    apt install -y caddy || echo "Failed to install Caddy via repo, will try direct download..."
+fi
 
-# Start and enable firewalld
+# Start and enable firewall
 echo "Configuring firewall..."
-systemctl start firewalld
-systemctl enable firewalld
+if [[ "$OS" == "fedora" ]]; then
+    systemctl start firewalld
+    systemctl enable firewalld
+elif [[ "$OS" == "debian" || "$OS" == "ubuntu" ]]; then
+    systemctl start ufw
+    systemctl enable ufw
+    ufw --force enable
+fi
 
 # Configure firewall
-firewall-cmd --permanent --add-service=http
-firewall-cmd --permanent --add-service=https
-firewall-cmd --permanent --add-port=6667/tcp
-firewall-cmd --permanent --add-port=6697/tcp
-firewall-cmd --reload
+echo "Configuring firewall rules..."
+if [[ "$OS" == "fedora" ]]; then
+    firewall-cmd --permanent --add-service=http
+    firewall-cmd --permanent --add-service=https
+    firewall-cmd --permanent --add-port=6667/tcp
+    firewall-cmd --permanent --add-port=6697/tcp
+    firewall-cmd --reload
+elif [[ "$OS" == "debian" || "$OS" == "ubuntu" ]]; then
+    ufw allow 22/tcp    # SSH
+    ufw allow 80/tcp    # HTTP
+    ufw allow 443/tcp   # HTTPS
+    ufw allow 6667/tcp  # IRC plain
+    ufw allow 6697/tcp  # IRC SSL
+fi
 
 # Create directories
 echo "Creating directories..."

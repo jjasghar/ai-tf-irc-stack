@@ -4,12 +4,19 @@ This directory contains configuration templates for all IRC stack services. Thes
 
 ## Files
 
-### `Caddyfile`
+### `Caddyfile` (and OS-specific variants)
 Caddy reverse proxy configuration that handles:
 - HTTPS termination with automatic Let's Encrypt certificates
 - Reverse proxying to The Lounge web interface
 - Security headers and compression
 - Access logging
+
+**OS-Specific Variants:**
+- `Caddyfile.fedora` - Optimized for Fedora/CentOS/RHEL systems
+- `Caddyfile.debian` - Optimized for Debian/Ubuntu systems
+- `Caddyfile` - Generic template (kept for reference)
+
+The installation scripts automatically select the appropriate variant for your OS.
 
 ### `ergo-ircd.yaml`
 Ergo IRC server configuration with:
@@ -165,7 +172,9 @@ defaults: {
 
 ### Custom Caddy Features
 
-Edit `configs/Caddyfile` to add features:
+Edit the appropriate OS-specific Caddyfile to add features:
+- `configs/Caddyfile.fedora` for Fedora/CentOS/RHEL
+- `configs/Caddyfile.debian` for Debian/Ubuntu
 
 ```
 {hostname} {
@@ -186,3 +195,5 @@ Edit `configs/Caddyfile` to add features:
     reverse_proxy localhost:9000
 }
 ```
+
+**Note:** Make sure to edit the correct file for your target OS.

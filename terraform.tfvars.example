@@ -13,6 +13,11 @@ cloud_provider = "digitalocean"
 # Get this from: https://cloud.digitalocean.com/account/api/tokens
 do_token = "your_digitalocean_api_token_here"
 
+# DigitalOcean SSH Key ID (only needed if using DigitalOcean)
+# Get this from: https://cloud.digitalocean.com/account/security
+# Find your SSH key and copy the ID number
+do_ssh_key_id = "12345678"
+
 # ===========================
 # IBM CLOUD CONFIGURATION
 # ===========================
@@ -23,8 +28,9 @@ ibm_api_key = "your_ibm_api_key_here"
 # IBM Cloud Region (only needed if using IBM Cloud)
 ibm_region = "us-south"
 
-# IBM Cloud Resource Group (only needed if using IBM Cloud)
-ibm_resource_group = "default"
+# IBM Cloud Resource Group ID (only needed if using IBM Cloud)
+# Leave empty to use account default, or specify resource group ID
+ibm_resource_group = ""
 
 # IBM Cloud SSH Key Name (only needed if using IBM Cloud)
 # Create SSH key first in IBM Cloud console
@@ -66,3 +72,26 @@ create_www_cname = false
 admin_email        = "admin@asgharlabs.io"
 ergo_network_name  = "AsgharlabsNet"
 ergo_motd          = "Welcome to Asgharlabs IRC Network!"
+
+# ===========================
+# INFRASTRUCTURE CONFIGURATION
+# ===========================
+# DigitalOcean instance size (only used for DigitalOcean)
+# Options: s-1vcpu-1gb, s-1vcpu-2gb, s-2vcpu-2gb, s-2vcpu-4gb, s-4vcpu-8gb, etc.
+do_instance_size = "s-2vcpu-4gb"
+
+# IBM Cloud instance profile (only used for IBM Cloud)
+# Options: bx2-2x8 (2 vCPU, 8GB), bx2-4x16 (4 vCPU, 16GB), bx2-8x32 (8 vCPU, 32GB), etc.
+ibm_instance_profile = "bx2-2x8"
+
+# IBM Cloud VPC subnet CIDR (only used for IBM Cloud)
+# Must be a valid private network CIDR block
+ibm_vpc_cidr = "10.240.0.0/24"
+
+# DNS record TTL (Time To Live) in seconds
+# How long DNS servers should cache the record
+dns_ttl = 300
+
+# Resource tags applied to all cloud resources
+# Used for organization, billing, and management
+resource_tags = ["irc", "ergo", "thelounge", "caddy"]

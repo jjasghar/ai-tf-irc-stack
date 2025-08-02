@@ -81,6 +81,13 @@ variable "ergo_motd" {
   default     = "Welcome to Asgharlabs IRC Network!"
 }
 
+# DigitalOcean SSH Key Configuration
+variable "do_ssh_key_id" {
+  description = "DigitalOcean SSH Key ID (get from DigitalOcean console)"
+  type        = string
+  default     = ""
+}
+
 # Cloud Provider Selection
 variable "cloud_provider" {
   description = "Cloud provider to use (digitalocean or ibm)"
@@ -107,13 +114,59 @@ variable "ibm_region" {
 }
 
 variable "ibm_resource_group" {
-  description = "IBM Cloud resource group name"
+  description = "IBM Cloud resource group ID (optional - leave empty to use account default)"
   type        = string
-  default     = "default"
+  default     = ""
 }
 
 variable "ibm_ssh_key_name" {
   description = "Name of existing IBM Cloud SSH key"
   type        = string
   default     = ""
+}
+
+# Debug Mode Configuration
+variable "debug_mode" {
+  description = "Enable debug mode with random hostname suffix (for testing)"
+  type        = bool
+  default     = true
+  validation {
+    condition     = var.debug_mode == true || var.debug_mode == false
+    error_message = "The debug_mode value must be either true or false."
+  }
+}
+
+# Infrastructure Configuration
+variable "do_instance_size" {
+  description = "DigitalOcean droplet size"
+  type        = string
+  default     = "s-2vcpu-4gb"
+}
+
+variable "ibm_instance_profile" {
+  description = "IBM Cloud instance profile (CPU and memory configuration)"
+  type        = string
+  default     = "bx2-2x8"
+}
+
+variable "ibm_vpc_cidr" {
+  description = "CIDR block for IBM Cloud VPC subnet"
+  type        = string
+  default     = "10.240.0.0/24"
+}
+
+variable "dns_ttl" {
+  description = "TTL (Time To Live) for DNS records in seconds"
+  type        = number
+  default     = 300
+  validation {
+    condition     = var.dns_ttl >= 60 && var.dns_ttl <= 86400
+    error_message = "DNS TTL must be between 60 and 86400 seconds (1 minute to 1 day)."
+  }
+}
+
+variable "resource_tags" {
+  description = "List of tags to apply to all resources"
+  type        = list(string)
+  default     = ["irc", "ergo", "thelounge", "caddy"]
 }

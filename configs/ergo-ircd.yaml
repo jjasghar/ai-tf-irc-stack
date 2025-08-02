@@ -4,10 +4,7 @@ network:
 server:
     name: {hostname}
     listeners:
-        ":6667":
-            tls:
-                key: tls.key
-                cert: tls.crt
+        ":6667": {}
         ":6697":
             tls:
                 key: tls.key
@@ -33,12 +30,6 @@ server:
     modes: +nt
     relaymsg-separators: "/"
     max-line-len: 512
-
-opers:
-    admin:
-        class: "server-admin"
-        whois-line: "is a server administrator"
-        password: "$2a$10$K5t7NH/UyyfMF/nITSuXpONjdvd6RZAbiikDPm6c3xrCNfSK6iAYe"
 
 logging:
     - method: stderr
@@ -76,7 +67,7 @@ accounts:
         additional-nick-limit: 2
         method: strict
         allow-custom-enforcement: false
-        guest-nickname-format: "Guest-?"
+        guest-nickname-format: "Guest-*"
         force-guest-format: false
         force-nick-equals-account: false
     multiclient:
@@ -111,7 +102,7 @@ history:
     autoreplay-on-join: 0
     autoresize-window: 3d
     persistent:
-        enabled: true
+        enabled: false
         unregistered-channels: false
         registered-channels: "opt-out"
         direct-messages: "opt-out"

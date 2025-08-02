@@ -204,6 +204,49 @@ To switch between providers:
 | `dns_record_name` | `irc-testing` | DNS record name |
 | `admin_email` | `admin@asgharlabs.io` | Admin email |
 | `ergo_network_name` | `AsgharlabsNet` | IRC network name |
+| `debug_mode` | `true` | Enable debug mode with random hostname suffix |
+
+## Debug Mode vs Production Mode
+
+This project supports two operational modes controlled by the `debug_mode` variable:
+
+### 🐛 **Debug Mode** (`debug_mode = true`)
+- **Hostname**: `irc-abc123.asgharlabs.io` (with random 6-character suffix)
+- **Purpose**: Testing and development deployments
+- **Benefits**: 
+  - Unique hostnames for each deployment
+  - No DNS conflicts when testing multiple versions
+  - Safe to deploy repeatedly without cleanup
+- **Use case**: Development, testing, CI/CD pipelines
+
+### 🚀 **Production Mode** (`debug_mode = false`)
+- **Hostname**: `irc.asgharlabs.io` (clean, no suffix)
+- **Purpose**: Production deployments
+- **Benefits**:
+  - Clean, memorable URLs
+  - Professional appearance
+  - SEO-friendly hostnames
+- **Use case**: Live production IRC servers
+
+### Examples
+
+**Debug Mode Configuration:**
+```hcl
+# terraform.tfvars
+debug_mode = true
+dns_record_name = "irc"
+# Results in: irc-abc123.asgharlabs.io
+```
+
+**Production Mode Configuration:**
+```hcl
+# terraform.tfvars
+debug_mode = false
+dns_record_name = "irc"  
+# Results in: irc.asgharlabs.io
+```
+
+> **⚠️ Important:** CNAME records (`www` subdomain) are only created in production mode (`debug_mode = false`)
 
 ## Getting API Tokens
 

@@ -46,6 +46,11 @@ output "dns_records" {
   description = "Created DNS records"
   value = {
     a_record     = "${local.unique_hostname} -> ${local.server_ip}"
-    cname_record = var.create_www_cname ? "www.${var.dns_record_name}-${random_string.dns_suffix.result}.${var.dns_zone} -> ${var.dns_record_name}-${random_string.dns_suffix.result}.${var.dns_zone}" : "Not created"
+    cname_record = var.create_www_cname && !var.debug_mode ? "www.${var.dns_record_name}.${var.dns_zone} -> ${var.dns_record_name}.${var.dns_zone}" : "Not created"
   }
+}
+
+output "debug_mode" {
+  description = "Current debug mode status"
+  value       = var.debug_mode
 }
