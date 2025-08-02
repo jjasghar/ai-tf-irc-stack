@@ -92,6 +92,12 @@ resource "digitalocean_droplet" "irc_server" {
     destination = "/tmp"
   }
 
+  # Copy scripts directory
+  provisioner "file" {
+    source      = "${path.module}/scripts"
+    destination = "/tmp"
+  }
+
   # Copy Fedora installation script for DigitalOcean
   provisioner "file" {
     source      = "${path.module}/scripts/install-fedora.sh"
@@ -257,6 +263,12 @@ resource "null_resource" "ibm_provisioning" {
   # Copy configuration files
   provisioner "file" {
     source      = "${path.module}/configs"
+    destination = "/tmp"
+  }
+
+  # Copy scripts directory
+  provisioner "file" {
+    source      = "${path.module}/scripts"
     destination = "/tmp"
   }
 

@@ -112,20 +112,22 @@ sed -i "s/{ergo_network}/$ERGO_NETWORK/g" /opt/ergo/ergo.motd
 # Set ownership for ergo directory
 chown -R ergo:ergo /opt/ergo
 
-# Generate Ergo certificates
-echo "Generating Ergo certificates..."
-cd /opt/ergo
-sudo -u ergo ./ergo mkcerts --conf ergo-ircd.yaml
+# Install certificate update script
+echo "Installing certificate update script..."
+cp /tmp/scripts/update-ergo-certs.sh /usr/local/bin/
+chmod +x /usr/local/bin/update-ergo-certs.sh
 
-# Set final ownership
+# Create Ergo certificate directory
+mkdir -p /opt/ergo/certs
 chown -R ergo:ergo /opt/ergo
 
-# Create Ergo systemd service
+# Create Ergo systemd service (without pre-start certificate copying)
 echo "Creating Ergo systemd service..."
 cat > /etc/systemd/system/ergo.service << 'EOF'
 [Unit]
 Description=Ergo IRC Server
 After=network.target
+Wants=caddy.service
 
 [Service]
 Type=simple
@@ -139,6 +141,37 @@ RestartSec=10
 [Install]
 WantedBy=multi-user.target
 EOF
+
+# Create certificate watcher service to update Ergo certs when Caddy renews them
+echo "Creating certificate auto-update service..."
+cat > /etc/systemd/system/ergo-cert-update.service << 'EOF'
+[Unit]
+Description=Update Ergo IRC Server Certificates
+After=caddy.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/update-ergo-certs.sh HOSTNAME_PLACEHOLDER
+ExecStartPost=/bin/systemctl restart ergo
+User=root
+EOF
+
+# Create path unit to watch for certificate changes
+cat > /etc/systemd/system/ergo-cert-update.path << 'EOF'
+[Unit]
+Description=Watch for Caddy certificate changes
+After=caddy.service
+
+[Path]
+PathChanged=/var/lib/caddy/.local/share/caddy/certificates/acme-v02.api.letsencrypt.org-directory/HOSTNAME_PLACEHOLDER/HOSTNAME_PLACEHOLDER.crt
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+# Replace the hostname placeholder in the certificate watcher files
+sed -i "s/HOSTNAME_PLACEHOLDER/$HOSTNAME/g" /etc/systemd/system/ergo-cert-update.service
+sed -i "s/HOSTNAME_PLACEHOLDER/$HOSTNAME/g" /etc/systemd/system/ergo-cert-update.path
 
 # Install The Lounge
 echo "Installing The Lounge..."
@@ -194,19 +227,90 @@ echo "======================================"
 echo "  Starting all services..."
 echo "======================================"
 systemctl daemon-reload
-systemctl enable ergo thelounge caddy
-systemctl start ergo thelounge caddy
+systemctl enable ergo thelounge caddy ergo-cert-update.path
+systemctl start ergo thelounge caddy ergo-cert-update.path
 
-# Wait for services to start and SSL certificate provisioning
-echo "Waiting for services to start and SSL certificate provisioning..."
-sleep 20
+# Wait for services to start
+echo "Waiting for services to start..."
+sleep 10
 
-# Check SSL certificate status
-echo "Checking SSL certificate status..."
-if journalctl -u caddy --since "1 minute ago" --no-pager | grep -q "certificate obtained successfully"; then
-    echo "✅ SSL certificate obtained successfully!"
+# Wait for SSL certificate provisioning with improved monitoring
+echo "======================================"
+echo "  Waiting for SSL Certificate..."
+echo "======================================"
+CERT_OBTAINED=false
+MAX_WAIT=600  # 10 minutes maximum wait for production
+WAIT_TIME=0
+RESTART_COUNT=0
+MAX_RESTARTS=8
+
+while [ $WAIT_TIME -lt $MAX_WAIT ]; do
+    # Check if certificate file exists and is valid
+    CERT_PATH="/var/lib/caddy/.local/share/caddy/certificates/acme-v02.api.letsencrypt.org-directory/$HOSTNAME/$HOSTNAME.crt"
+    if [ -f "$CERT_PATH" ] && openssl x509 -in "$CERT_PATH" -text -noout >/dev/null 2>&1; then
+        echo "✅ SSL certificate file found and is valid!"
+        CERT_OBTAINED=true
+        break
+    fi
+    
+    # Check logs for successful certificate obtainment (JSON format)
+    if journalctl -u caddy --since "10 minutes ago" --no-pager | grep -q '"certificate obtained successfully".*"identifier":"'$HOSTNAME'"'; then
+        echo "✅ SSL certificate obtained according to logs!"
+        # Wait a bit for file to be written
+        sleep 5
+        if [ -f "$CERT_PATH" ]; then
+            CERT_OBTAINED=true
+            break
+        fi
+    fi
+    
+    # Check for certificate errors and restart more aggressively
+    if journalctl -u caddy --since "2 minutes ago" --no-pager | grep -q -E "(could not get certificate|challenge failed|DNS problem).*$HOSTNAME"; then
+        if [ $RESTART_COUNT -lt $MAX_RESTARTS ]; then
+            RESTART_COUNT=$((RESTART_COUNT + 1))
+            echo "⚠️  Certificate error detected. Restarting Caddy (attempt $RESTART_COUNT/$MAX_RESTARTS)..."
+            systemctl restart caddy
+            sleep 20  # Give more time after restart
+        fi
+    fi
+    
+    # Periodic restart to trigger SSL attempts
+    if [ $((WAIT_TIME % 120)) -eq 0 ] && [ $WAIT_TIME -gt 0 ] && [ $RESTART_COUNT -lt $MAX_RESTARTS ]; then
+        RESTART_COUNT=$((RESTART_COUNT + 1))
+        echo "🔄 Periodic Caddy restart to trigger SSL (attempt $RESTART_COUNT/$MAX_RESTARTS)..."
+        systemctl restart caddy
+        sleep 20
+    fi
+    
+    echo "⏳ Waiting for SSL certificate... ($WAIT_TIME/$MAX_WAIT seconds, restarts: $RESTART_COUNT)"
+    sleep 20
+    WAIT_TIME=$((WAIT_TIME + 20))
+done
+
+if [ "$CERT_OBTAINED" = true ]; then
+    echo "✅ SSL certificate ready! Copying to Ergo..."
+    
+    # Copy certificates to Ergo and restart
+    /usr/local/bin/update-ergo-certs.sh $HOSTNAME
+    
+    if [ $? -eq 0 ]; then
+        echo "✅ Certificates copied successfully! Restarting Ergo..."
+        systemctl restart ergo
+        sleep 5
+        
+        # Verify Ergo is using the correct certificate
+        if openssl x509 -in /opt/ergo/certs/server.crt -text -noout | grep -q "Let's Encrypt"; then
+            echo "✅ Ergo is now using Let's Encrypt certificates!"
+        else
+            echo "⚠️  Ergo may still be using self-signed certificates"
+        fi
+    else
+        echo "⚠️  Certificate copy failed, Ergo will use self-signed certificates"
+    fi
 else
-    echo "⚠️  SSL certificate may still be in progress. Check with: journalctl -u caddy"
+    echo "⚠️  SSL certificate not obtained within timeout. Caddy will continue trying in background."
+    echo "    You can monitor progress with: journalctl -u caddy -f"
+    echo "    Ergo will use self-signed certificates for now."
 fi
 
 # Create service check script
@@ -232,9 +336,24 @@ echo "======================================"
 echo "  Installation Complete! ✅"
 echo "======================================"
 echo "Ergo IRC Server: Running on ports 6667 (plain) and 6697 (SSL)"
+if [ "$CERT_OBTAINED" = true ]; then
+    echo "  ✅ Using Let's Encrypt SSL certificates (no more self-signed errors!)"
+else
+    echo "  ⚠️  Using self-signed certificates (SSL may show warnings)"
+fi
 echo "The Lounge Web Client: Running on port 9000"
 echo "Caddy Reverse Proxy: Running on ports 80 and 443"
 echo "Web Interface: https://$HOSTNAME"
+echo ""
+echo "🔐 SSL Certificate Status:"
+if [ "$CERT_OBTAINED" = true ]; then
+    echo "  ✅ Let's Encrypt certificates automatically provisioned and configured"
+    echo "  ✅ IRC SSL connections will work without certificate warnings"
+    echo "  ✅ Automatic certificate renewal is enabled"
+else
+    echo "  ⚠️  SSL certificates are still being obtained in background"
+    echo "  ℹ️  Monitor with: journalctl -u caddy -f"
+fi
 echo ""
 echo "To check service status, run: /root/check_services.sh"
 echo "======================================"

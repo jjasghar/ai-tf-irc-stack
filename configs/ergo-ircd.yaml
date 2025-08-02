@@ -7,8 +7,8 @@ server:
         ":6667": {}
         ":6697":
             tls:
-                key: tls.key
-                cert: tls.crt
+                key: /opt/ergo/certs/server.key
+                cert: /opt/ergo/certs/server.crt
     motd: ergo.motd
     
     motd-formatting: true
