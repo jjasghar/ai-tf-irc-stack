@@ -3,7 +3,7 @@
 [![Multi-Cloud Support](https://img.shields.io/badge/Multi--Cloud-DigitalOcean%20%7C%20IBM%20Cloud-blue?style=flat-square)](#cloud-providers)
 [![Terraform](https://img.shields.io/badge/Terraform-1.0%2B-623CE4?logo=terraform&style=flat-square)](https://terraform.io)
 [![Ansible](https://img.shields.io/badge/Ansible-Automation-red?logo=ansible&style=flat-square)](#ansible-automation)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](LICENSE)
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg?style=flat-square)](LICENSE)
 
 This Terraform configuration deploys a complete IRC stack with **multi-cloud support** and **fully automated Ansible provisioning**:
 
