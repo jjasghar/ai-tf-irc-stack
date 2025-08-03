@@ -79,37 +79,51 @@ resource "digitalocean_droplet" "irc_server" {
 
   tags = var.resource_tags
 
-  connection {
-    type        = "ssh"
-    user        = "root"
-    private_key = file(var.ssh_private_key_path)
-    host        = self.ipv4_address
-  }
-
-  # Copy configuration files
-  provisioner "file" {
-    source      = "${path.module}/configs"
-    destination = "/tmp"
-  }
-
-  # Copy scripts directory
-  provisioner "file" {
-    source      = "${path.module}/scripts"
-    destination = "/tmp"
-  }
-
-  # Copy Fedora installation script for DigitalOcean
-  provisioner "file" {
-    source      = "${path.module}/scripts/install-fedora.sh"
-    destination = "/tmp/install-fedora.sh"
-  }
-
-  # Execute Fedora installation script
+  # Wait for SSH to be available
   provisioner "remote-exec" {
+    connection {
+      type        = "ssh"
+      user        = "root"
+      private_key = file(var.ssh_private_key_path)
+      host        = self.ipv4_address
+      timeout     = "5m"
+    }
+    
     inline = [
-      "chmod +x /tmp/install-fedora.sh",
-      "/tmp/install-fedora.sh '${local.unique_hostname}' '${var.admin_email}' '${var.ergo_network_name}' '${var.ergo_motd}'"
+      "echo 'SSH connection established successfully'"
     ]
+  }
+
+  # Generate Ansible inventory file
+  provisioner "local-exec" {
+    command = <<-EOT
+      cat > ansible/inventory/hosts <<EOF
+[irc_servers]
+${local.unique_hostname} ansible_host=${self.ipv4_address} ansible_user=root ansible_ssh_private_key_file=${var.ssh_private_key_path}
+
+[irc_servers:vars]
+hostname=${local.unique_hostname}
+cloud_provider=${var.cloud_provider}
+debug_mode=${var.debug_mode}
+admin_email=${var.admin_email}
+ergo_network_name=${var.ergo_network_name}
+ergo_motd=${var.ergo_motd}
+EOF
+    EOT
+  }
+
+  # Copy files to remote host using Ansible
+  provisioner "local-exec" {
+    command = "ansible all -i ansible/inventory/hosts -m copy -a 'src=configs dest=/tmp'"
+  }
+
+  provisioner "local-exec" {
+    command = "ansible all -i ansible/inventory/hosts -m copy -a 'src=scripts dest=/tmp'"
+  }
+
+  # Run Ansible playbook
+  provisioner "local-exec" {
+    command = "ansible-playbook -i ansible/inventory/hosts ansible/playbooks/site.yml"
   }
 }
 
@@ -253,37 +267,51 @@ resource "null_resource" "ibm_provisioning" {
     ibm_is_floating_ip.irc_fip
   ]
 
-  connection {
-    type        = "ssh"
-    user        = "root"  # Debian default user on IBM Cloud
-    private_key = file(var.ssh_private_key_path)
-    host        = ibm_is_floating_ip.irc_fip[0].address
-  }
-
-  # Copy configuration files
-  provisioner "file" {
-    source      = "${path.module}/configs"
-    destination = "/tmp"
-  }
-
-  # Copy scripts directory
-  provisioner "file" {
-    source      = "${path.module}/scripts"
-    destination = "/tmp"
-  }
-
-  # Copy Debian installation script for IBM Cloud
-  provisioner "file" {
-    source      = "${path.module}/scripts/install-debian.sh"
-    destination = "/tmp/install-debian.sh"
-  }
-
-  # Execute Debian installation script
+  # Wait for SSH to be available on IBM Cloud
   provisioner "remote-exec" {
+    connection {
+      type        = "ssh"
+      user        = "root"
+      private_key = file(var.ssh_private_key_path)
+      host        = ibm_is_floating_ip.irc_fip[0].address
+      timeout     = "5m"
+    }
+    
     inline = [
-      "chmod +x /tmp/install-debian.sh",
-      "/tmp/install-debian.sh '${local.unique_hostname}' '${var.admin_email}' '${var.ergo_network_name}' '${var.ergo_motd}'"
+      "echo 'SSH connection established successfully'"
     ]
+  }
+
+  # Generate Ansible inventory file for IBM Cloud
+  provisioner "local-exec" {
+    command = <<-EOT
+      cat > ansible/inventory/hosts <<EOF
+[irc_servers]
+${local.unique_hostname} ansible_host=${ibm_is_floating_ip.irc_fip[0].address} ansible_user=root ansible_ssh_private_key_file=${var.ssh_private_key_path}
+
+[irc_servers:vars]
+hostname=${local.unique_hostname}
+cloud_provider=${var.cloud_provider}
+debug_mode=${var.debug_mode}
+admin_email=${var.admin_email}
+ergo_network_name=${var.ergo_network_name}
+ergo_motd=${var.ergo_motd}
+EOF
+    EOT
+  }
+
+  # Copy files to remote host using Ansible
+  provisioner "local-exec" {
+    command = "ansible all -i ansible/inventory/hosts -m copy -a 'src=configs dest=/tmp'"
+  }
+
+  provisioner "local-exec" {
+    command = "ansible all -i ansible/inventory/hosts -m copy -a 'src=scripts dest=/tmp'"
+  }
+
+  # Run Ansible playbook
+  provisioner "local-exec" {
+    command = "ansible-playbook -i ansible/inventory/hosts ansible/playbooks/site.yml"
   }
 }
 

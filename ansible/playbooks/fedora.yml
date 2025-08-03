@@ -1,0 +1,428 @@
+---
+# Fedora-specific tasks for IRC stack deployment
+
+- name: Install Python DNF dependencies for Fedora 41
+  raw: dnf install -y python3-libdnf5
+  ignore_errors: true
+  
+- name: Update package cache
+  dnf:
+    update_cache: true
+
+- name: Install system packages
+  dnf:
+    name:
+      - curl
+      - wget
+      - tar
+      - gzip
+      - git
+      - golang
+      - jq
+      - sqlite-devel
+      - sqlite
+      - nodejs
+      - npm
+      - firewalld
+    state: present
+  register: package_install
+  ignore_errors: true
+
+- name: Update all packages to resolve potential SQLite conflicts
+  dnf:
+    name: "*"
+    state: latest
+  ignore_errors: true
+
+- name: Display package installation warnings if any failed
+  debug:
+    msg: "Warning: Some packages may have failed to install. Continuing..."
+  when: package_install.failed is defined and package_install.failed
+
+- name: Install Caddy repository
+  yum_repository:
+    name: caddy
+    description: Caddy repository
+    baseurl: https://dl.cloudsmith.io/public/caddy/stable/rpm/rhel/el$releasever/$basearch
+    gpgkey: https://dl.cloudsmith.io/public/caddy/stable/gpg.key
+    gpgcheck: true
+    state: present
+
+- name: Install Caddy
+  dnf:
+    name: caddy
+    state: present
+
+- name: Create ergo user and group
+  group:
+    name: ergo
+    state: present
+
+- name: Create ergo user
+  user:
+    name: ergo
+    group: ergo
+    home: /opt/ergo
+    shell: /bin/bash
+    system: true
+    create_home: false
+    state: present
+
+- name: Create ergo directory
+  file:
+    path: /opt/ergo
+    state: directory
+    owner: ergo
+    group: ergo
+    mode: '0755'
+
+- name: Download and extract Ergo IRC server
+  unarchive:
+    src: https://github.com/ergochat/ergo/releases/download/v2.14.0/ergo-2.14.0-linux-x86_64.tar.gz
+    dest: /tmp
+    remote_src: true
+    creates: /tmp/ergo-2.14.0-linux-x86_64
+
+- name: Copy Ergo files to installation directory
+  copy:
+    src: /tmp/ergo-2.14.0-linux-x86_64/
+    dest: /opt/ergo/
+    remote_src: true
+    owner: ergo
+    group: ergo
+    mode: preserve
+
+- name: Copy configuration files
+  copy:
+    src: "{{ item.src }}"
+    dest: "{{ item.dest }}"
+    owner: "{{ item.owner | default('root') }}"
+    group: "{{ item.group | default('root') }}"
+    mode: "{{ item.mode | default('0644') }}"
+    remote_src: true
+  loop:
+    - { src: "/tmp/configs/ergo-ircd.yaml", dest: "/opt/ergo/ergo-ircd.yaml", owner: "ergo", group: "ergo" }
+    - { src: "/tmp/configs/ergo-motd.txt", dest: "/opt/ergo/ergo.motd", owner: "ergo", group: "ergo" }
+    - { src: "/tmp/configs/Caddyfile.fedora", dest: "/etc/caddy/Caddyfile" }
+
+- name: Template configuration files with hostname substitution
+  replace:
+    path: "{{ item.path }}"
+    regexp: "{{ item.regexp }}"
+    replace: "{{ hostname }}"
+  loop:
+    - { path: "/opt/ergo/ergo-ircd.yaml", regexp: "HOSTNAME_PLACEHOLDER" }
+    - { path: "/opt/ergo/ergo-ircd.yaml", regexp: "\\{hostname\\}" }
+    - { path: "/opt/ergo/ergo.motd", regexp: "\\{hostname\\}" }
+    - { path: "/etc/caddy/Caddyfile", regexp: "\\{hostname\\}" }
+
+- name: Substitute network name in configuration files
+  replace:
+    path: "{{ item }}"
+    regexp: '\{ergo_network\}'
+    replace: "{{ ergo_network }}"
+  loop:
+    - /opt/ergo/ergo-ircd.yaml
+    - /opt/ergo/ergo.motd
+
+- name: Verify configuration substitutions were successful
+  shell: |
+    if grep -q '{ergo_network}' /opt/ergo/ergo-ircd.yaml; then
+      echo "ERROR: ergo_network substitution failed in ergo-ircd.yaml"
+      exit 1
+    fi
+    if grep -q '{hostname}' /opt/ergo/ergo-ircd.yaml; then
+      echo "ERROR: hostname substitution failed in ergo-ircd.yaml"
+      exit 1
+    fi
+    if grep -q '{hostname}' /opt/ergo/ergo.motd; then
+      echo "ERROR: hostname substitution failed in ergo.motd"
+      exit 1
+    fi
+    echo "All substitutions completed successfully"
+  register: config_verification
+  failed_when: config_verification.rc != 0
+
+- name: Install certificate update script
+  copy:
+    src: /tmp/scripts/update-ergo-certs.sh
+    dest: /usr/local/bin/update-ergo-certs.sh
+    mode: '0755'
+    remote_src: true
+
+- name: Create Ergo certificate directory
+  file:
+    path: /opt/ergo/certs
+    state: directory
+    owner: ergo
+    group: ergo
+    mode: '0755'
+
+- name: Create temporary self-signed certificates for Ergo
+  shell: |
+    openssl req -x509 -newkey rsa:4096 -keyout /opt/ergo/certs/server.key -out /opt/ergo/certs/server.crt -days 1 -nodes -subj '/CN={{ hostname }}'
+    chown ergo:ergo /opt/ergo/certs/server.*
+    chmod 600 /opt/ergo/certs/server.key
+  args:
+    creates: /opt/ergo/certs/server.crt
+
+- name: Create Ergo systemd service
+  copy:
+    dest: /etc/systemd/system/ergo.service
+    content: |
+      [Unit]
+      Description=Ergo IRC Server
+      After=network.target
+      Wants=caddy.service
+
+      [Service]
+      Type=simple
+      User=ergo
+      Group=ergo
+      WorkingDirectory=/opt/ergo
+      ExecStart=/opt/ergo/ergo run --conf /opt/ergo/ergo-ircd.yaml
+      Restart=always
+      RestartSec=10
+
+      [Install]
+      WantedBy=multi-user.target
+
+- name: Create certificate auto-update service
+  copy:
+    dest: /etc/systemd/system/ergo-cert-update.service
+    content: |
+      [Unit]
+      Description=Update Ergo IRC Server Certificates
+      After=caddy.service
+
+      [Service]
+      Type=oneshot
+      ExecStart=/usr/local/bin/update-ergo-certs.sh {{ hostname }}
+      ExecStartPost=/bin/systemctl restart ergo
+      User=root
+
+- name: Create certificate path watcher
+  copy:
+    dest: /etc/systemd/system/ergo-cert-update.path
+    content: |
+      [Unit]
+      Description=Watch for Caddy certificate changes
+      After=caddy.service
+
+      [Path]
+      PathChanged=/var/lib/caddy/.local/share/caddy/certificates/acme-v02.api.letsencrypt.org-directory/{{ hostname }}/{{ hostname }}.crt
+
+      [Install]
+      WantedBy=multi-user.target
+
+- name: Install The Lounge globally via npm
+  npm:
+    name: thelounge
+    global: true
+    state: present
+
+- name: Create thelounge user
+  user:
+    name: thelounge
+    system: true
+    home: /var/lib/thelounge
+    shell: /bin/bash
+    create_home: true
+    state: present
+
+- name: Initialize The Lounge configuration
+  block:
+    - name: Start The Lounge briefly to generate config
+      shell: |
+        timeout 10 runuser -l thelounge -c 'thelounge start' || true
+      args:
+        creates: /var/lib/thelounge/.thelounge/config.js
+      register: thelounge_init
+      failed_when: false
+
+- name: Copy The Lounge configuration
+  copy:
+    src: /tmp/configs/thelounge-config.js
+    dest: /var/lib/thelounge/.thelounge/config.js
+    owner: thelounge
+    group: thelounge
+    mode: '0644'
+    remote_src: true
+
+- name: Substitute network name in The Lounge config
+  replace:
+    path: /var/lib/thelounge/.thelounge/config.js
+    regexp: '\{ergo_network\}'
+    replace: "{{ ergo_network }}"
+
+- name: Fix The Lounge web interface to bind to all interfaces
+  replace:
+    path: /var/lib/thelounge/.thelounge/config.js
+    regexp: 'host: "127\.0\.0\.1",\s*\n\s*port: 9000'
+    replace: 'host: "0.0.0.0",\n    port: 9000'
+
+- name: Ensure IRC server default points to localhost
+  replace:
+    path: /var/lib/thelounge/.thelounge/config.js
+    regexp: '(defaults: \{[^}]*host: )"[^"]*"([^}]*port: 6667)'
+    replace: '\1"127.0.0.1"\2'
+
+- name: Create The Lounge systemd service
+  copy:
+    dest: /etc/systemd/system/thelounge.service
+    content: |
+      [Unit]
+      Description=The Lounge IRC Web Client
+      After=network.target
+
+      [Service]
+      Type=simple
+      User=thelounge
+      Group=thelounge
+      WorkingDirectory=/var/lib/thelounge
+      ExecStart=/usr/local/bin/thelounge start
+      Restart=always
+      RestartSec=10
+      Environment=NODE_ENV=production
+
+      [Install]
+      WantedBy=multi-user.target
+
+- name: Create Caddy log directory
+  file:
+    path: /var/log/caddy
+    state: directory
+    owner: caddy
+    group: caddy
+    mode: '0755'
+
+- name: Configure firewalld
+  block:
+    - name: Start and enable firewalld
+      systemd:
+        name: firewalld
+        state: started
+        enabled: true
+
+    - name: Allow SSH, HTTP, HTTPS, and IRC ports
+      firewalld:
+        port: "{{ item }}/tcp"
+        permanent: true
+        state: enabled
+        immediate: true
+      loop:
+        - '22'    # SSH
+        - '80'    # HTTP
+        - '443'   # HTTPS
+        - '6667'  # IRC plain
+        - '6697'  # IRC SSL
+  ignore_errors: true
+
+- name: Reload systemd daemon
+  systemd:
+    daemon_reload: true
+
+- name: Enable and start services
+  systemd:
+    name: "{{ item }}"
+    enabled: true
+    state: started
+  loop:
+    - ergo
+    - thelounge
+    - caddy
+    - ergo-cert-update.path
+
+- name: Wait for services to start
+  wait_for:
+    port: "{{ item }}"
+    host: "{{ inventory_hostname }}"
+    timeout: 30
+  loop:
+    - 80    # Caddy HTTP
+    - 6667  # Ergo IRC
+  ignore_errors: true
+
+- name: Setup automatic SSL certificate acquisition (non-blocking)
+  block:
+    - name: Create Caddy certificate retry timer
+      copy:
+        dest: /etc/systemd/system/caddy-cert-retry.timer
+        content: |
+          [Unit]
+          Description=Retry Caddy SSL certificate acquisition
+          
+          [Timer]
+          OnBootSec=3min
+          OnUnitActiveSec=5min
+          AccuracySec=1min
+          
+          [Install]
+          WantedBy=timers.target
+        mode: '0644'
+    
+    - name: Create Caddy certificate retry service  
+      copy:
+        dest: /etc/systemd/system/caddy-cert-retry.service
+        content: |
+          [Unit]
+          Description=Retry Caddy SSL certificate acquisition and update Ergo
+          
+          [Service]
+          Type=oneshot
+          ExecStart=/bin/bash -c 'sleep 30; CERT_PATH="/var/lib/caddy/.local/share/caddy/certificates/acme-v02.api.letsencrypt.org-directory/{{ hostname }}/{{ hostname }}.crt"; if [ -f "$CERT_PATH" ] && openssl x509 -in "$CERT_PATH" -text -noout >/dev/null 2>&1; then echo "Certificate found, updating Ergo..."; /usr/local/bin/update-ergo-certs.sh {{ hostname }} || true; systemctl restart ergo || true; systemctl disable caddy-cert-retry.timer || true; echo "Certificate setup complete, disabling retry timer"; else echo "Certificate not ready yet, ensuring Caddy is running..."; systemctl restart caddy || true; echo "Caddy restarted, will retry in 5 minutes"; fi'
+          User=root
+        mode: '0644'
+    
+    - name: Validate systemd service syntax
+      shell: systemctl cat caddy-cert-retry.service
+      register: service_validation
+      failed_when: false
+      
+    - name: Reload systemd and enable timer (non-blocking)
+      systemd:
+        name: caddy-cert-retry.timer
+        enabled: true
+        daemon_reload: true
+      ignore_errors: true
+    
+    - name: Start timer after brief delay (non-blocking) 
+      shell: sleep 10 && systemctl start caddy-cert-retry.timer
+      async: 30
+      poll: 0
+      ignore_errors: true
+    
+    - name: Display non-blocking SSL setup message
+      debug:
+        msg:
+          - "🚀 SSL Certificate Acquisition: AUTOMATIC & NON-BLOCKING"
+          - "    ✅ Caddy will acquire Let's Encrypt certificates automatically"
+          - "    ✅ Certificates will be applied to Ergo when ready"
+          - "    ✅ Automatic retry every 5 minutes until successful"
+          - "    ✅ No manual intervention required!"
+
+- name: Create service check script
+  copy:
+    dest: /root/check_services.sh
+    mode: '0755'
+    content: |
+      #!/bin/bash
+      echo "=== IRC Stack Service Status ==="
+      echo "Ergo IRC Server:"
+      systemctl status ergo --no-pager -l
+      echo ""
+      echo "The Lounge Web Client:"
+      systemctl status thelounge --no-pager -l  
+      echo ""
+      echo "Caddy Reverse Proxy:"
+      systemctl status caddy --no-pager -l
+      echo ""
+      echo "=== Network Ports ==="
+      ss -tlnp | grep -E ":(80|443|6667|6697)"
+      echo ""
+      echo "=== Recent Logs ==="
+      echo "Caddy logs (last 10 lines):"
+      journalctl -u caddy --no-pager -n 10
+      echo ""
+      echo "Ergo logs (last 5 lines):"
+      journalctl -u ergo --no-pager -n 5

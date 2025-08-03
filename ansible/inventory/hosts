@@ -1,0 +1,10 @@
+[irc_servers]
+irc.asgharlabs.io ansible_host=52.118.187.174 ansible_user=root ansible_ssh_private_key_file=/Users/jjasghar/.ssh/id_rsa
+
+[irc_servers:vars]
+hostname=irc.asgharlabs.io
+cloud_provider=ibm
+debug_mode=false
+admin_email=admin@asgharlabs.io
+ergo_network_name=AsgharlabsNet
+ergo_motd=Welcome to Asgharlabs IRC Network!
