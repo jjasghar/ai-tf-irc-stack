@@ -15,6 +15,19 @@ server:
     relaymsg:
         enabled: false
     max-sendq: 96k
+    # Connection timeout and ping settings
+    connection-timeout: 10m
+    connection-throttling:
+        enabled: true
+        duration: 10m
+        max-connections: 32
+        ban-duration: 10m
+        ban-message: "You have attempted to connect too many times within a short duration. Wait a while, and try again."
+        exempted:
+            - "localhost"
+            - "127.0.0.1"
+    ping-timeout: 120s
+    idle-timeout: 0  # Disable idle timeout (0 = never timeout)
     ip-limits:
         count: false
         throttle: false
