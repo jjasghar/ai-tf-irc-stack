@@ -15,10 +15,10 @@ server:
     relaymsg:
         enabled: false
     max-sendq: 96k
-    # Connection timeout and ping settings
-    connection-timeout: 10m
+    # Connection timeout and ping settings - 1 hour to prevent disconnections
+    connection-timeout: 3600s
     connection-throttling:
-        enabled: true
+        enabled: false
         duration: 10m
         max-connections: 32
         ban-duration: 10m
@@ -26,8 +26,8 @@ server:
         exempted:
             - "localhost"
             - "127.0.0.1"
-    ping-timeout: 120s
-    idle-timeout: 0  # Disable idle timeout (0 = never timeout)
+    ping-timeout: 3600s  # 1 hour - prevents ping-related disconnections
+    idle-timeout: 3600s  # 1 hour idle timeout
     ip-limits:
         count: false
         throttle: false
@@ -63,7 +63,7 @@ accounts:
         enabled: true
         allow-before-connect: true
         throttling:
-            enabled: true
+            enabled: false
             duration: 10m
             max-attempts: 30
         bcrypt-cost: 9
@@ -82,7 +82,7 @@ accounts:
         allow-custom-enforcement: false
         guest-nickname-format: "Guest-*"
         force-guest-format: false
-        force-nick-equals-account: false
+        force-nick-equals-account: true
     multiclient:
         enabled: true
         allowed-by-default: true

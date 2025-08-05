@@ -1,5 +1,5 @@
 [irc_servers]
-irc.asgharlabs.io ansible_host=52.118.187.174 ansible_user=root ansible_ssh_private_key_file=/Users/jjasghar/.ssh/id_rsa
+irc.asgharlabs.io ansible_host=150.240.67.228 ansible_user=root ansible_ssh_private_key_file=/Users/jjasghar/.ssh/id_rsa
 
 [irc_servers:vars]
 hostname=irc.asgharlabs.io
