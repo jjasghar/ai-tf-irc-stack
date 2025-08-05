@@ -335,53 +335,25 @@
     - 6667  # Ergo IRC
   ignore_errors: true
 
-- name: Setup automatic SSL certificate acquisition (non-blocking)
+- name: Setup automatic SSL certificate acquisition (fixed - no recurring timers)
   block:
-    - name: Create Caddy certificate retry timer
-      copy:
-        dest: /etc/systemd/system/caddy-cert-retry.timer
-        content: |
-          [Unit]
-          Description=Retry Caddy SSL certificate acquisition
-          
-          [Timer]
-          OnBootSec=3min
-          OnUnitActiveSec=5min
-          AccuracySec=1min
-          
-          [Install]
-          WantedBy=timers.target
-        mode: '0644'
-    
-    - name: Create Caddy certificate retry service  
-      copy:
-        dest: /etc/systemd/system/caddy-cert-retry.service
-        content: |
-          [Unit]
-          Description=Retry Caddy SSL certificate acquisition and update Ergo
-          
-          [Service]
-          Type=oneshot
-          ExecStart=/bin/bash -c 'sleep 30; CERT_PATH="/var/lib/caddy/.local/share/caddy/certificates/acme-v02.api.letsencrypt.org-directory/{{ hostname }}/{{ hostname }}.crt"; if [ -f "$CERT_PATH" ] && openssl x509 -in "$CERT_PATH" -text -noout >/dev/null 2>&1; then echo "Certificate found, updating Ergo..."; /usr/local/bin/update-ergo-certs.sh {{ hostname }} || true; systemctl restart ergo || true; systemctl disable caddy-cert-retry.timer || true; echo "Certificate setup complete, disabling retry timer"; else echo "Certificate not ready yet, ensuring Caddy is running..."; systemctl restart caddy || true; echo "Caddy restarted, will retry in 5 minutes"; fi'
-          User=root
-        mode: '0644'
-    
-    - name: Validate systemd service syntax
-      shell: systemctl cat caddy-cert-retry.service
-      register: service_validation
-      failed_when: false
-      
-    - name: Reload systemd and enable timer (non-blocking)
-      systemd:
-        name: caddy-cert-retry.timer
-        enabled: true
-        daemon_reload: true
+    - name: Wait for Caddy to acquire SSL certificates
+      wait_for:
+        path: "/var/lib/caddy/.local/share/caddy/certificates/acme-v02.api.letsencrypt.org-directory/{{ hostname }}/{{ hostname }}.crt"
+        timeout: 300
       ignore_errors: true
-    
-    - name: Start timer after brief delay (non-blocking) 
-      shell: sleep 10 && systemctl start caddy-cert-retry.timer
-      async: 30
-      poll: 0
+      
+    - name: Update Ergo certificates if Let's Encrypt certificates are available
+      shell: |
+        CERT_PATH="/var/lib/caddy/.local/share/caddy/certificates/acme-v02.api.letsencrypt.org-directory/{{ hostname }}/{{ hostname }}.crt"
+        if [ -f "$CERT_PATH" ] && openssl x509 -in "$CERT_PATH" -text -noout >/dev/null 2>&1; then
+          echo "Certificate found, updating Ergo..."
+          /usr/local/bin/update-ergo-certs.sh {{ hostname }} || true
+          systemctl restart ergo || true
+          echo "Certificate setup complete!"
+        else
+          echo "Certificate not ready yet, Ergo will use self-signed certificates"
+        fi
       ignore_errors: true
     
     - name: Display non-blocking SSL setup message
