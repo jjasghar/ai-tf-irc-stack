@@ -362,7 +362,7 @@
           - "🚀 SSL Certificate Acquisition: AUTOMATIC & NON-BLOCKING"
           - "    ✅ Caddy will acquire Let's Encrypt certificates automatically"
           - "    ✅ Certificates will be applied to Ergo when ready"
-          - "    ✅ Automatic retry every 5 minutes until successful"
+          - "    ✅ One-time setup during deployment"
           - "    ✅ No manual intervention required!"
 
 - name: Create service check script
